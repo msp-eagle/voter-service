@@ -17,15 +17,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
-import java.awt.Color;
-import java.awt.Graphics2D;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -60,13 +59,18 @@ public class RegistrationServiceImpl implements RegistrationService {
             throw new RuntimeException("Error serializing registration data to JSON", e);
         }
 
-        Registration savedEntity = registrationRepository.save(entity);
 
         // Save biometrics into dedicated biometric_details table
         if (requestDTO.getBiometrics() != null && !requestDTO.getBiometrics().isEmpty()) {
             BiometricDetails biometricDetails = mapBiometricsListToEntity(requestDTO.getRegistrationId(), requestDTO.getBiometrics());
+
             biometricDetailsRepository.save(biometricDetails);
         }
+        String vid = "63" + (100000 + new Random().nextInt(900000))
+                + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        entity.setVid(vid);
+        Registration savedEntity = registrationRepository.save(entity);
+
 
         return mapEntityToResponse(savedEntity);
     }
@@ -196,57 +200,42 @@ public class RegistrationServiceImpl implements RegistrationService {
 
                 switch (attr) {
                     case "face":
-                    case "photo":
                         entity.setFace(data);
                         break;
                     case "left_iris":
-                    case "leftiris":
                         entity.setLeftIris(data);
                         break;
                     case "right_iris":
-                    case "rightiris":
                         entity.setRightIris(data);
                         break;
                     case "left_thumb":
-                    case "leftthumb":
                         entity.setLeftThumb(data);
                         break;
                     case "right_thumb":
-                    case "rightthumb":
                         entity.setRightThumb(data);
                         break;
                     case "left_index_finger":
-                    case "left_index":
-                    case "left_slap":
                         entity.setLeftIndexFinger(data);
                         break;
                     case "right_index_finger":
-                    case "right_index":
-                    case "right_slap":
                         entity.setRightIndexFinger(data);
                         break;
                     case "left_middle_finger":
-                    case "left_middle":
                         entity.setLeftMiddleFinger(data);
                         break;
                     case "left_ring_finger":
-                    case "left_ring":
                         entity.setLeftRingFinger(data);
                         break;
                     case "left_little_finger":
-                    case "left_little":
                         entity.setLeftLittleFinger(data);
                         break;
                     case "right_middle_finger":
-                    case "right_middle":
                         entity.setRightMiddleFinger(data);
                         break;
                     case "right_ring_finger":
-                    case "right_ring":
                         entity.setRightRingFinger(data);
                         break;
                     case "right_little_finger":
-                    case "right_little":
                         entity.setRightLittleFinger(data);
                         break;
                 }
