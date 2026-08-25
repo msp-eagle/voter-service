@@ -43,6 +43,24 @@ public class LocalTransferServiceImpl implements LocalTransferService {
     @Value("${spring.datasource.password1:Msp@321#}")
     private String workstationPassword1;
 
+    @Value("${spring.datasource.url2:jdbc:postgresql://192.168.1.232:5432/applicants}")
+    private String workstationUrl2;
+
+    @Value("${spring.datasource.username2:postgres}")
+    private String workstationUsername2;
+
+    @Value("${spring.datasource.password2:Msp@321#}")
+    private String workstationPassword2;
+
+    @Value("${spring.datasource.url3:jdbc:postgresql://localhost:5433/applicants}")
+    private String localApplicantsUrl;
+
+    @Value("${spring.datasource.username3:postgres}")
+    private String localApplicantsUsername;
+
+    @Value("${spring.datasource.password3:root}")
+    private String localApplicantsPassword;
+
     @Autowired
     public LocalTransferServiceImpl(WorkstationApiClient workstationApiClient,
                                     TransferHistoryRepository transferHistoryRepository,
@@ -54,60 +72,108 @@ public class LocalTransferServiceImpl implements LocalTransferService {
         this.dataSource = dataSource;
     }
 
-    private Connection getWorkstationConnection(String workstationIp) throws SQLException {
-        if (workstationIp == null || workstationIp.trim().isEmpty()) {
-            throw new IllegalArgumentException("Workstation IP/Host is required");
-        }
-        String raw = workstationIp.trim();
-        if (raw.startsWith("http://")) raw = raw.substring(7);
-        if (raw.startsWith("https://")) raw = raw.substring(8);
-        if (raw.endsWith("/")) raw = raw.substring(0, raw.length() - 1);
-
-        String host = raw;
-        int port = 5432;
-        if (raw.contains(":")) {
-            String[] parts = raw.split(":");
-            host = parts[0];
+    private Connection getLocalDestinationConnection(String tableName) throws SQLException {
+        if (localApplicantsUrl != null && !localApplicantsUrl.trim().isEmpty()) {
+            String user = (localApplicantsUsername != null && !localApplicantsUsername.trim().isEmpty())
+                    ? localApplicantsUsername.trim() : "postgres";
+            String pass = (localApplicantsPassword != null && !localApplicantsPassword.trim().isEmpty())
+                    ? localApplicantsPassword.trim() : "root";
             try {
-                port = Integer.parseInt(parts[1]);
-            } catch (NumberFormatException ignored) {}
+                return DriverManager.getConnection(localApplicantsUrl.trim(), user, pass);
+            } catch (SQLException e) {
+                System.err.println("Note: Connecting to local applicants DB (" + localApplicantsUrl + ") failed: " + e.getMessage() + ". Falling back to default DataSource.");
+            }
         }
+        return dataSource.getConnection();
+    }
 
-        // Extract target database name from spring.datasource.url1 (default: voter_reg)
-        String targetDb = "voter_reg";
-        if (workstationUrl1 != null && workstationUrl1.contains("/")) {
-            int lastSlash = workstationUrl1.lastIndexOf('/');
-            if (lastSlash != -1 && lastSlash < workstationUrl1.length() - 1) {
-                targetDb = workstationUrl1.substring(lastSlash + 1);
-                if (targetDb.contains("?")) {
-                    targetDb = targetDb.substring(0, targetDb.indexOf("?"));
+    private Connection getWorkstationConnection(String workstationIp) throws SQLException {
+        String user = (workstationUsername2 != null && !workstationUsername2.trim().isEmpty())
+                ? workstationUsername2.trim()
+                : (workstationUsername1 != null ? workstationUsername1.trim() : "postgres");
+        String pass = (workstationPassword2 != null && !workstationPassword2.trim().isEmpty())
+                ? workstationPassword2.trim()
+                : (workstationPassword1 != null ? workstationPassword1.trim() : "Msp@321#");
+
+        // 1. Direct use of workstationUrl2 if configured
+        if (workstationUrl2 != null && !workstationUrl2.trim().isEmpty()) {
+            if (workstationIp == null || workstationIp.trim().isEmpty() || "192.168.1.232".equalsIgnoreCase(workstationIp.trim())) {
+                try {
+                    return DriverManager.getConnection(workstationUrl2.trim(), user, pass);
+                } catch (SQLException e) {
+                    System.err.println("Note: connecting directly with workstationUrl2 (" + workstationUrl2 + ") failed: " + e.getMessage());
                 }
             }
         }
 
-        // Use workstation credentials for remote IPs; fallback to local credentials if localhost
-        String user = workstationUsername1 != null ? workstationUsername1 : "postgres";
-        String pass = workstationPassword1 != null ? workstationPassword1 : "Msp@321#";
+        String host = "192.168.1.232";
+        int port = 5432;
+        String targetDb = "applicants";
+
+        // Prioritize spring.datasource.url2 (applicants database) for workstation data
+        String configUrl = (workstationUrl2 != null && !workstationUrl2.trim().isEmpty()) ? workstationUrl2 : workstationUrl1;
+        if (configUrl != null && configUrl.contains("://")) {
+            String afterScheme = configUrl.substring(configUrl.indexOf("://") + 3);
+            if (afterScheme.contains("/")) {
+                String hostPort = afterScheme.substring(0, afterScheme.indexOf('/'));
+                if (hostPort.contains(":")) {
+                    host = hostPort.split(":")[0];
+                    try {
+                        port = Integer.parseInt(hostPort.split(":")[1]);
+                    } catch (NumberFormatException ignored) {}
+                } else {
+                    host = hostPort;
+                }
+                String dbPart = afterScheme.substring(afterScheme.indexOf('/') + 1);
+                if (dbPart.contains("?")) {
+                    dbPart = dbPart.substring(0, dbPart.indexOf('?'));
+                }
+                if (!dbPart.trim().isEmpty()) {
+                    targetDb = dbPart.trim();
+                }
+            }
+        }
+
+        if (workstationIp != null && !workstationIp.trim().isEmpty()) {
+            String raw = workstationIp.trim();
+            if (raw.startsWith("http://")) raw = raw.substring(7);
+            if (raw.startsWith("https://")) raw = raw.substring(8);
+            if (raw.endsWith("/")) raw = raw.substring(0, raw.length() - 1);
+            if (raw.contains(":")) {
+                String[] parts = raw.split(":");
+                host = parts[0];
+                try {
+                    port = Integer.parseInt(parts[1]);
+                } catch (NumberFormatException ignored) {}
+            } else {
+                host = raw;
+            }
+        }
+
         if ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equalsIgnoreCase(host)) {
             user = localDbUsername != null ? localDbUsername : "postgres";
             pass = localDbPassword != null ? localDbPassword : "root";
         }
 
-        String primaryUrl = "jdbc:postgresql://" + host + ":" + port + "/" + targetDb;
+        String primaryUrl = "jdbc:postgresql://" + host + ":" + port + "/" + targetDb + "?currentSchema=public";
         try {
             return DriverManager.getConnection(primaryUrl, user, pass);
         } catch (SQLException e) {
-            // Fallback for local dev databases if targetDb does not exist
-            if (e.getMessage() != null && e.getMessage().contains("database") && e.getMessage().contains("does not exist")) {
-                String fallbackUrl = "jdbc:postgresql://" + host + ":" + port + "/backup_votater";
-                try {
-                    return DriverManager.getConnection(fallbackUrl, user, pass);
-                } catch (SQLException ex) {
-                    String defaultUrl = "jdbc:postgresql://" + host + ":" + port + "/postgres";
-                    return DriverManager.getConnection(defaultUrl, user, pass);
+            String fallbackDb = "applicants".equalsIgnoreCase(targetDb) ? "voter_reg" : "applicants";
+            String fallbackUrl = "jdbc:postgresql://" + host + ":" + port + "/" + fallbackDb;
+            try {
+                return DriverManager.getConnection(fallbackUrl, user, pass);
+            } catch (SQLException ex) {
+                if ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equalsIgnoreCase(host)) {
+                    String localFallback = "jdbc:postgresql://" + host + ":" + port + "/backup_votater";
+                    try {
+                        return DriverManager.getConnection(localFallback, user, pass);
+                    } catch (SQLException ex2) {
+                        return DriverManager.getConnection("jdbc:postgresql://" + host + ":" + port + "/postgres", user, pass);
+                    }
                 }
+                throw e;
             }
-            throw e;
         }
     }
 
@@ -311,23 +377,31 @@ public class LocalTransferServiceImpl implements LocalTransferService {
             return new TransferResponseDTO("FAILED", "Workstation PostgreSQL unreachable: " + health.getMessage(), 0);
         }
 
+        String targetTable = (tableName != null && !tableName.trim().isEmpty()) ? tableName.trim() : "doctable";
         String schemaName = "public";
-        String actualTable = tableName;
+        String actualTable = targetTable;
 
-        List<TableInfoDTO> wsTables = getWorkstationTables(workstationIp);
-        for (TableInfoDTO t : wsTables) {
-            if (t.getTableName().equalsIgnoreCase(tableName)) {
-                schemaName = t.getSchemaName();
-                actualTable = t.getTableName();
-                break;
+        String querySql;
+        if ("doctable".equalsIgnoreCase(targetTable) || "public.doctable".equalsIgnoreCase(targetTable)) {
+            querySql = "select \"ID\",\"FIRSTNAME\",\"LASTNAME\",\"SEX\",\"DOBYEAR\",\"DOBMONTH\",\"DOBDAY\" from public.doctable";
+            actualTable = "doctable";
+        } else {
+            List<TableInfoDTO> wsTables = getWorkstationTables(workstationIp);
+            for (TableInfoDTO t : wsTables) {
+                if (t.getTableName().equalsIgnoreCase(targetTable)) {
+                    schemaName = t.getSchemaName();
+                    actualTable = t.getTableName();
+                    break;
+                }
             }
+            querySql = "SELECT * FROM " + getFullTableName(schemaName, actualTable);
         }
-        String fullTableName = getFullTableName(schemaName, actualTable);
+        String fullTableName = "doctable".equalsIgnoreCase(actualTable) ? "doctable" : getFullTableName(schemaName, actualTable);
 
         List<Map<String, Object>> wsRecords = new ArrayList<>();
         try (Connection wsConn = getWorkstationConnection(workstationIp);
              Statement stmt = wsConn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM " + fullTableName)) {
+             ResultSet rs = stmt.executeQuery(querySql)) {
 
             ResultSetMetaData meta = rs.getMetaData();
             int colCount = meta.getColumnCount();
@@ -340,25 +414,271 @@ public class LocalTransferServiceImpl implements LocalTransferService {
             }
         } catch (Exception e) {
             String errorMsg = "Direct JDBC download from Workstation PostgreSQL failed: " + e.getMessage();
-            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD", tableName, "FAILED", 0, errorMsg);
+            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD", actualTable, "FAILED", 0, errorMsg);
             return new TransferResponseDTO("FAILED", errorMsg, 0);
         }
 
         if (wsRecords.isEmpty()) {
-            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD", tableName, "SUCCESS", 0, "No records found on Workstation");
-            return new TransferResponseDTO("SUCCESS", "No records found on Workstation PostgreSQL for " + tableName, 0);
+            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD", actualTable, "SUCCESS", 0, "No records found on Workstation");
+            return new TransferResponseDTO("SUCCESS", "No records found on Workstation PostgreSQL for " + actualTable, 0);
         }
 
         List<String> primaryKeys = getPrimaryKeysForTable(schemaName, actualTable);
         try {
-            int recordsSaved = saveDownloadedRecordsToLocalDb(schemaName, actualTable, fullTableName, wsRecords, primaryKeys);
-            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD", tableName, "SUCCESS", recordsSaved, "Download successful");
-            return new TransferResponseDTO("SUCCESS", "Data downloaded from Workstation PostgreSQL into Local DB successfully", recordsSaved, 0, tableName);
+            int recordsSaved = saveDownloadedRecordsToLocalDb(workstationIp, schemaName, actualTable, fullTableName, wsRecords, primaryKeys);
+            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD", actualTable, "SUCCESS", recordsSaved, "Download successful");
+            return new TransferResponseDTO("SUCCESS", "Data downloaded from Workstation PostgreSQL into Local DB successfully", recordsSaved, 0, actualTable);
         } catch (Exception e) {
             String errorMsg = "Failed to store downloaded records into Local DB: " + e.getMessage();
-            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD", tableName, "FAILED", 0, errorMsg);
+            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD", actualTable, "FAILED", 0, errorMsg);
             return new TransferResponseDTO("FAILED", errorMsg, 0);
         }
+    }
+
+    @Override
+    public List<Map<String, Object>> getWorkstationRecords(String workstationIp, String tableName) {
+        String targetTable = (tableName != null && !tableName.trim().isEmpty()) ? tableName.trim() : "doctable";
+        String sql;
+        if ("doctable".equalsIgnoreCase(targetTable) || "public.doctable".equalsIgnoreCase(targetTable)) {
+            sql = "select \"ID\",\"FIRSTNAME\",\"LASTNAME\",\"SEX\",\"DOBYEAR\",\"DOBMONTH\",\"DOBDAY\" from public.doctable";
+        } else {
+            String schemaName = "public";
+            String actualTable = targetTable;
+            List<TableInfoDTO> wsTables = getWorkstationTables(workstationIp);
+            for (TableInfoDTO t : wsTables) {
+                if (t.getTableName().equalsIgnoreCase(targetTable)) {
+                    schemaName = t.getSchemaName();
+                    actualTable = t.getTableName();
+                    break;
+                }
+            }
+            sql = "SELECT * FROM " + getFullTableName(schemaName, actualTable);
+        }
+
+        List<Map<String, Object>> records = new ArrayList<>();
+        try (Connection wsConn = getWorkstationConnection(workstationIp);
+             Statement stmt = wsConn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            ResultSetMetaData meta = rs.getMetaData();
+            int colCount = meta.getColumnCount();
+            while (rs.next()) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                for (int i = 1; i <= colCount; i++) {
+                    String colName = meta.getColumnName(i);
+                    Object val = rs.getObject(i);
+                    if (val instanceof byte[]) {
+                        row.put(colName, Base64.getEncoder().encodeToString((byte[]) val));
+                    } else {
+                        row.put(colName, val);
+                    }
+                }
+                records.add(row);
+            }
+        } catch (Exception e) {
+            System.err.println("Error fetching records from Workstation PostgreSQL (" + workstationIp + ", query " + sql + "): " + e.getMessage());
+            throw new RuntimeException("Failed to fetch records from Workstation PostgreSQL: " + e.getMessage(), e);
+        }
+
+        return records;
+    }
+
+    @Override
+    public TransferResponseDTO performDownloadSelected(String workstationIp, String tableName, List<String> recordIds) {
+        if (recordIds == null || recordIds.isEmpty()) {
+            return performDownload(workstationIp, tableName);
+        }
+
+        ConnectionHealthDTO health = testConnection(workstationIp);
+        if (!"CONNECTED".equalsIgnoreCase(health.getStatus()) && !"UP".equalsIgnoreCase(health.getStatus())) {
+            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD_SELECTED", tableName, "FAILED", 0, "Connection check failed: " + health.getMessage());
+            return new TransferResponseDTO("FAILED", "Workstation PostgreSQL unreachable: " + health.getMessage(), 0);
+        }
+
+        String targetTable = (tableName != null && !tableName.trim().isEmpty()) ? tableName.trim() : "doctable";
+        String schemaName = "public";
+        String actualTable = targetTable;
+
+        String querySql;
+        if ("doctable".equalsIgnoreCase(targetTable) || "public.doctable".equalsIgnoreCase(targetTable)) {
+            querySql = "select \"ID\",\"FIRSTNAME\",\"LASTNAME\",\"SEX\",\"DOBYEAR\",\"DOBMONTH\",\"DOBDAY\" from public.doctable";
+            actualTable = "doctable";
+        } else {
+            List<TableInfoDTO> wsTables = getWorkstationTables(workstationIp);
+            for (TableInfoDTO t : wsTables) {
+                if (t.getTableName().equalsIgnoreCase(targetTable)) {
+                    schemaName = t.getSchemaName();
+                    actualTable = t.getTableName();
+                    break;
+                }
+            }
+            querySql = "SELECT * FROM " + getFullTableName(schemaName, actualTable);
+        }
+        String fullTableName = "doctable".equalsIgnoreCase(actualTable) ? "doctable" : getFullTableName(schemaName, actualTable);
+        List<String> primaryKeys = getPrimaryKeysForTable(schemaName, actualTable);
+
+        List<Map<String, Object>> wsRecords = new ArrayList<>();
+        try (Connection wsConn = getWorkstationConnection(workstationIp);
+             Statement stmt = wsConn.createStatement();
+             ResultSet rs = stmt.executeQuery(querySql)) {
+
+            ResultSetMetaData meta = rs.getMetaData();
+            int colCount = meta.getColumnCount();
+            while (rs.next()) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                for (int i = 1; i <= colCount; i++) {
+                    row.put(meta.getColumnName(i), rs.getObject(i));
+                }
+                wsRecords.add(row);
+            }
+        } catch (Exception e) {
+            String errorMsg = "Direct JDBC download from Workstation PostgreSQL failed: " + e.getMessage();
+            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD_SELECTED", actualTable, "FAILED", 0, errorMsg);
+            return new TransferResponseDTO("FAILED", errorMsg, 0);
+        }
+
+        if (wsRecords.isEmpty()) {
+            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD_SELECTED", actualTable, "SUCCESS", 0, "No records found on Workstation");
+            return new TransferResponseDTO("SUCCESS", "No records found on Workstation PostgreSQL for " + actualTable, 0);
+        }
+
+        // Filter for matching records based on selected recordIds
+        Set<String> selectedIdSet = recordIds.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
+
+        List<Map<String, Object>> selectedRecords = new ArrayList<>();
+        if (selectedIdSet.contains("all") || selectedIdSet.isEmpty()) {
+            selectedRecords.addAll(wsRecords);
+        } else {
+            for (Map<String, Object> row : wsRecords) {
+                boolean isMatch = false;
+
+                // 1. Check primary key values
+                for (String pk : primaryKeys) {
+                    Object pkVal = getCaseInsensitiveValue(row, pk);
+                    if (pkVal != null && selectedIdSet.contains(String.valueOf(pkVal).trim().toLowerCase())) {
+                        isMatch = true;
+                        break;
+                    }
+                }
+
+                // 2. Check common identifier column names ("ID", "registration_id", "code", "uin")
+                if (!isMatch) {
+                    for (Map.Entry<String, Object> entry : row.entrySet()) {
+                        String col = entry.getKey().toLowerCase();
+                        if (col.equals("id") || col.equals("registration_id") || col.equals("code") || col.equals("uin")) {
+                            Object val = entry.getValue();
+                            if (val != null && selectedIdSet.contains(String.valueOf(val).trim().toLowerCase())) {
+                                isMatch = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (isMatch) {
+                    selectedRecords.add(row);
+                }
+            }
+        }
+
+        if (selectedRecords.isEmpty()) {
+            return new TransferResponseDTO("FAILED", "None of the selected record IDs matched records in table " + actualTable, 0);
+        }
+
+        try {
+            int recordsSaved = saveDownloadedRecordsToLocalDb(workstationIp, schemaName, actualTable, fullTableName, selectedRecords, primaryKeys);
+            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD_SELECTED", actualTable, "SUCCESS", recordsSaved, "Selected download successful (" + recordsSaved + " records)");
+            return new TransferResponseDTO("SUCCESS", "Selected " + recordsSaved + " records downloaded from Workstation PostgreSQL into Local DB successfully", recordsSaved, 0, actualTable);
+        } catch (Exception e) {
+            String errorMsg = "Failed to store selected records into Local DB: " + e.getMessage();
+            recordAudit("WORKSTATION", "LOCAL", workstationIp, "DOWNLOAD_SELECTED", actualTable, "FAILED", 0, errorMsg);
+            return new TransferResponseDTO("FAILED", errorMsg, 0);
+        }
+    }
+
+    private Object getCaseInsensitiveValue(Map<String, Object> map, String key) {
+        if (map == null || key == null) return null;
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(key)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public TransferResponseDTO clearAllLocalData() {
+        return clearLocalTableData("ALL");
+    }
+
+    @Override
+    public TransferResponseDTO clearLocalTableData(String tableName) {
+        String target = (tableName != null && !tableName.trim().isEmpty()) ? tableName.trim() : "ALL";
+        int totalCleared = 0;
+        List<String> clearedTables = new ArrayList<>();
+
+        List<String> tablesToClear = new ArrayList<>();
+        if ("ALL".equalsIgnoreCase(target)) {
+            tablesToClear.addAll(Arrays.asList("doctable", "app_demo", "app_photo", "voter_reg_details", "biometric_details", "doc_type", "location", "loc_hierarchy_list"));
+            try (Connection conn = getLocalDestinationConnection(null)) {
+                DatabaseMetaData meta = conn.getMetaData();
+                try (ResultSet rs = meta.getTables(null, null, "%", new String[]{"TABLE"})) {
+                    while (rs.next()) {
+                        String t = rs.getString("TABLE_NAME");
+                        if (t != null && !t.startsWith("pg_") && !t.startsWith("sql_") && !t.equalsIgnoreCase("transfer_history") && !tablesToClear.contains(t.toLowerCase())) {
+                            tablesToClear.add(t);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        } else {
+            tablesToClear.add(target);
+        }
+
+        for (String table : tablesToClear) {
+            boolean cleared = false;
+            try (Connection conn = getLocalDestinationConnection(table);
+                 Statement stmt = conn.createStatement()) {
+                int rows = 0;
+                try {
+                    rows = stmt.executeUpdate("DELETE FROM \"" + table + "\"");
+                    cleared = true;
+                } catch (Exception ignored) {
+                    try {
+                        rows = stmt.executeUpdate("DELETE FROM " + table);
+                        cleared = true;
+                    } catch (Exception ignored2) {}
+                }
+
+                if (cleared) {
+                    totalCleared += rows;
+                    if (!clearedTables.contains(table)) {
+                        clearedTables.add(table);
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Note: clearing table " + table + " in local DB: " + e.getMessage());
+            }
+
+            try {
+                int rows = jdbcTemplate.update("DELETE FROM " + table);
+                totalCleared += rows;
+                if (!clearedTables.contains(table)) {
+                    clearedTables.add(table);
+                }
+            } catch (Exception ignored) {}
+        }
+
+        String msg = clearedTables.isEmpty()
+                ? "No tables found or cleared for target: " + target
+                : "Cleared data from " + clearedTables.size() + " local table(s): " + clearedTables + " (Total rows removed: " + totalCleared + ")";
+
+        recordAudit("LOCAL", "LOCAL", "127.0.0.1", "CLEAR", target, "SUCCESS", totalCleared, msg);
+        return new TransferResponseDTO("SUCCESS", msg, totalCleared, 0, target);
     }
 
     @Override
@@ -523,84 +843,212 @@ public class LocalTransferServiceImpl implements LocalTransferService {
         }
     }
 
-    @Transactional
+    private void ensureLocalTableExists(Connection localConn, String workstationIp, String schema, String table, List<Map<String, Object>> sampleRecords) {
+        if (table == null || table.trim().isEmpty()) return;
+        String cleanTable = table.trim();
+
+        try (Statement stmt = localConn.createStatement()) {
+            try {
+                stmt.execute("CREATE SCHEMA IF NOT EXISTS applicants;");
+            } catch (Exception ignored) {}
+
+            boolean exists = false;
+            try {
+                DatabaseMetaData meta = localConn.getMetaData();
+                try (ResultSet rs = meta.getTables(null, null, "%", new String[]{"TABLE"})) {
+                    while (rs.next()) {
+                        String tName = rs.getString("TABLE_NAME");
+                        if (cleanTable.equalsIgnoreCase(tName)) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            if (exists) return;
+
+            // Fetch columns and data types from Workstation DB to recreate table locally
+            List<String> colDefs = new ArrayList<>();
+            try (Connection wsConn = getWorkstationConnection(workstationIp)) {
+                DatabaseMetaData wsMeta = wsConn.getMetaData();
+                try (ResultSet rs = wsMeta.getColumns(null, null, "%", null)) {
+                    while (rs.next()) {
+                        String tName = rs.getString("TABLE_NAME");
+                        if (cleanTable.equalsIgnoreCase(tName)) {
+                            String colName = rs.getString("COLUMN_NAME");
+                            String typeName = rs.getString("TYPE_NAME");
+                            int colSize = rs.getInt("COLUMN_SIZE");
+                            if ("varchar".equalsIgnoreCase(typeName) || "character varying".equalsIgnoreCase(typeName)) {
+                                colDefs.add("\"" + colName + "\" VARCHAR(" + (colSize > 0 ? colSize : 255) + ")");
+                            } else if ("bytea".equalsIgnoreCase(typeName) || "blob".equalsIgnoreCase(typeName)) {
+                                colDefs.add("\"" + colName + "\" BYTEA");
+                            } else if ("text".equalsIgnoreCase(typeName)) {
+                                colDefs.add("\"" + colName + "\" TEXT");
+                            } else if ("int4".equalsIgnoreCase(typeName) || "integer".equalsIgnoreCase(typeName)) {
+                                colDefs.add("\"" + colName + "\" INTEGER");
+                            } else if ("int8".equalsIgnoreCase(typeName) || "bigint".equalsIgnoreCase(typeName)) {
+                                colDefs.add("\"" + colName + "\" BIGINT");
+                            } else if ("bool".equalsIgnoreCase(typeName) || "boolean".equalsIgnoreCase(typeName)) {
+                                colDefs.add("\"" + colName + "\" BOOLEAN");
+                            } else if ("timestamp".equalsIgnoreCase(typeName) || "timestamptz".equalsIgnoreCase(typeName)) {
+                                colDefs.add("\"" + colName + "\" TIMESTAMP");
+                            } else if ("date".equalsIgnoreCase(typeName)) {
+                                colDefs.add("\"" + colName + "\" DATE");
+                            } else {
+                                colDefs.add("\"" + colName + "\" " + (typeName != null ? typeName : "TEXT"));
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Note: could not read workstation metadata for " + cleanTable + ": " + e.getMessage());
+            }
+
+            // Fallback from sample record columns if workstation metadata was not available
+            if (colDefs.isEmpty() && sampleRecords != null && !sampleRecords.isEmpty()) {
+                Map<String, Object> firstRow = sampleRecords.get(0);
+                for (Map.Entry<String, Object> entry : firstRow.entrySet()) {
+                    String col = entry.getKey();
+                    Object val = entry.getValue();
+                    if (val instanceof byte[]) {
+                        colDefs.add("\"" + col + "\" BYTEA");
+                    } else if (val instanceof Integer) {
+                        colDefs.add("\"" + col + "\" INTEGER");
+                    } else if (val instanceof Long) {
+                        colDefs.add("\"" + col + "\" BIGINT");
+                    } else if (val instanceof Boolean) {
+                        colDefs.add("\"" + col + "\" BOOLEAN");
+                    } else {
+                        colDefs.add("\"" + col + "\" TEXT");
+                    }
+                }
+            }
+
+            if (!colDefs.isEmpty()) {
+                String createSql = "CREATE TABLE IF NOT EXISTS \"" + cleanTable + "\" (" + String.join(", ", colDefs) + ")";
+                stmt.execute(createSql);
+                System.out.println("Auto-created table locally: " + cleanTable);
+            }
+        } catch (Exception e) {
+            System.err.println("Note: auto-create table " + cleanTable + " in local DB: " + e.getMessage());
+        }
+    }
+
     protected int saveDownloadedRecordsToLocalDb(String schemaName, String tableName, String fullTableName, List<Map<String, Object>> records, List<String> primaryKeys) {
+        return saveDownloadedRecordsToLocalDb(null, schemaName, tableName, fullTableName, records, primaryKeys);
+    }
+
+    protected int saveDownloadedRecordsToLocalDb(String workstationIp, String schemaName, String tableName, String fullTableName, List<Map<String, Object>> records, List<String> primaryKeys) {
+        if (records == null || records.isEmpty()) return 0;
+
         int count = 0;
-        Map<String, Integer> columnTypes = getColumnTypes(schemaName, tableName);
+        try (Connection localConn = getLocalDestinationConnection(tableName)) {
+            ensureLocalTableExists(localConn, workstationIp, schemaName, tableName, records);
 
-        for (Map<String, Object> record : records) {
-            Map<String, Object> cleanRecord = new LinkedHashMap<>();
-            for (Map.Entry<String, Object> entry : record.entrySet()) {
-                cleanRecord.put(entry.getKey().toLowerCase(), entry.getValue());
-            }
+            String destTable = "\"" + tableName + "\"";
+            Map<String, Integer> columnTypes = getColumnTypesForConnection(localConn, schemaName, tableName);
 
-            List<String> columns = new ArrayList<>(cleanRecord.keySet());
-            List<Object> values = new ArrayList<>();
-            for (String col : columns) {
-                Object rawVal = cleanRecord.get(col);
-                Integer dataType = columnTypes.get(col.toLowerCase());
-                values.add(convertValueForJdbc(rawVal, dataType));
-            }
+            List<String> basePKs = (primaryKeys != null && !primaryKeys.isEmpty())
+                    ? primaryKeys
+                    : ("doctable".equalsIgnoreCase(tableName) ? Collections.singletonList("ID") : Collections.emptyList());
 
-            if (primaryKeys != null && !primaryKeys.isEmpty()) {
-                StringBuilder sql = new StringBuilder();
-                sql.append("INSERT INTO ").append(fullTableName).append(" (");
-                sql.append(String.join(", ", columns));
-                sql.append(") VALUES (");
-                sql.append(columns.stream().map(c -> "?").collect(Collectors.joining(", ")));
-                sql.append(") ON CONFLICT (");
-                sql.append(String.join(", ", primaryKeys));
-                sql.append(") DO UPDATE SET ");
+            for (Map<String, Object> record : records) {
+                Map<String, Object> cleanRecord = new LinkedHashMap<>();
+                for (Map.Entry<String, Object> entry : record.entrySet()) {
+                    cleanRecord.put(entry.getKey(), entry.getValue());
+                }
 
-                List<String> updateClause = new ArrayList<>();
-                for (String col : columns) {
-                    if (!primaryKeys.contains(col)) {
-                        updateClause.add(col + " = EXCLUDED." + col);
+                List<String> rawColumns = new ArrayList<>(cleanRecord.keySet());
+                List<String> quotedColumns = rawColumns.stream().map(c -> "\"" + c + "\"").collect(Collectors.toList());
+                List<Object> values = new ArrayList<>();
+                for (String col : rawColumns) {
+                    Object rawVal = cleanRecord.get(col);
+                    Integer dataType = columnTypes.get(col.toLowerCase());
+                    values.add(convertValueForJdbc(rawVal, dataType));
+                }
+
+                List<String> matchedPKs = new ArrayList<>();
+                for (String col : rawColumns) {
+                    for (String pk : basePKs) {
+                        if (pk.equalsIgnoreCase(col)) {
+                            matchedPKs.add(col);
+                            break;
+                        }
+                    }
+                }
+                if (matchedPKs.isEmpty()) {
+                    for (String col : rawColumns) {
+                        String lc = col.toLowerCase();
+                        if (lc.equals("id") || lc.equals("app_id") || lc.equals("photo_id") || lc.equals("applicant_id") || lc.equals("registration_id")) {
+                            matchedPKs.add(col);
+                            break;
+                        }
                     }
                 }
 
-                if (updateClause.isEmpty()) {
-                    sql.append(columns.get(0)).append(" = EXCLUDED.").append(columns.get(0));
-                } else {
-                    sql.append(String.join(", ", updateClause));
+                if (!matchedPKs.isEmpty()) {
+                    // Delete existing row with same ID/PK to ensure idempotency without requiring explicit DB unique constraints
+                    StringBuilder delSql = new StringBuilder("DELETE FROM ").append(destTable).append(" WHERE ");
+                    List<String> delConditions = new ArrayList<>();
+                    List<Object> delValues = new ArrayList<>();
+                    for (String pk : matchedPKs) {
+                        delConditions.add("\"" + pk + "\" = ?");
+                        Object pkVal = cleanRecord.get(pk);
+                        Integer dataType = columnTypes.get(pk.toLowerCase());
+                        delValues.add(convertValueForJdbc(pkVal, dataType));
+                    }
+                    delSql.append(String.join(" AND ", delConditions));
+
+                    try (PreparedStatement delStmt = localConn.prepareStatement(delSql.toString())) {
+                        for (int i = 0; i < delValues.size(); i++) {
+                            delStmt.setObject(i + 1, delValues.get(i));
+                        }
+                        delStmt.executeUpdate();
+                    } catch (Exception ignored) {
+                    }
                 }
 
-                jdbcTemplate.update(sql.toString(), values.toArray());
-            } else {
                 StringBuilder sql = new StringBuilder();
-                sql.append("INSERT INTO ").append(fullTableName).append(" (");
-                sql.append(String.join(", ", columns));
+                sql.append("INSERT INTO ").append(destTable).append(" (");
+                sql.append(String.join(", ", quotedColumns));
                 sql.append(") VALUES (");
-                sql.append(columns.stream().map(c -> "?").collect(Collectors.joining(", ")));
+                sql.append(quotedColumns.stream().map(c -> "?").collect(Collectors.joining(", ")));
                 sql.append(")");
 
-                jdbcTemplate.update(sql.toString(), values.toArray());
+                try (PreparedStatement pstmt = localConn.prepareStatement(sql.toString())) {
+                    for (int i = 0; i < values.size(); i++) {
+                        pstmt.setObject(i + 1, values.get(i));
+                    }
+                    pstmt.executeUpdate();
+                }
+                count++;
             }
-            count++;
+        } catch (SQLException e) {
+            System.err.println("Error saving downloaded records to local destination DB: " + e.getMessage());
+            throw new RuntimeException("Failed to save records to local destination database: " + e.getMessage(), e);
         }
         return count;
     }
 
+
+
     private Map<String, Integer> getColumnTypes(String schema, String table) {
-        Map<String, Integer> columnTypes = new HashMap<>();
         try (Connection conn = dataSource.getConnection()) {
-            DatabaseMetaData meta = conn.getMetaData();
-            try (ResultSet rs = meta.getColumns(null, schema, table, null)) {
-                while (rs.next()) {
-                    String colName = rs.getString("COLUMN_NAME").toLowerCase();
-                    int dataType = rs.getInt("DATA_TYPE");
-                    columnTypes.put(colName, dataType);
-                }
-            }
+            return getColumnTypesForConnection(conn, schema, table);
         } catch (Exception e) {
-            System.err.println("Error getting column types for " + schema + "." + table + ": " + e.getMessage());
+            System.err.println("Error getting column types from default DataSource for " + schema + "." + table + ": " + e.getMessage());
+            return Collections.emptyMap();
         }
-        return columnTypes;
     }
 
     private Object convertValueForJdbc(Object val, Integer dataType) {
         if (val == null) {
             return null;
+        }
+
+        if (val instanceof byte[]) {
+            return val;
         }
 
         if (dataType != null && (dataType == java.sql.Types.TIMESTAMP || dataType == java.sql.Types.TIMESTAMP_WITH_TIMEZONE || dataType == java.sql.Types.DATE)) {
@@ -704,19 +1152,30 @@ public class LocalTransferServiceImpl implements LocalTransferService {
 
     private List<String> getPrimaryKeysForTable(String schema, String table) {
         List<String> pkColumns = new ArrayList<>();
+        if ("doctable".equalsIgnoreCase(table)) {
+            pkColumns.add("ID");
+            return pkColumns;
+        }
         try (Connection conn = dataSource.getConnection()) {
             DatabaseMetaData meta = conn.getMetaData();
             try (ResultSet rs = meta.getPrimaryKeys(null, schema, table)) {
                 while (rs.next()) {
-                    pkColumns.add(rs.getString("COLUMN_NAME").toLowerCase());
+                    pkColumns.add(rs.getString("COLUMN_NAME"));
                 }
             }
         } catch (Exception ignored) {
         }
 
         if (pkColumns.isEmpty()) {
-            String lowerTable = table.toLowerCase();
-            if (lowerTable.equals("voter_reg_details") || lowerTable.equals("biometric_details")) {
+            String lowerTable = table != null ? table.toLowerCase() : "";
+            if (lowerTable.equals("doctable")) {
+                pkColumns.add("ID");
+            } else if (lowerTable.contains("demo") || lowerTable.contains("photo") || lowerTable.contains("applicant")) {
+                pkColumns.add("app_id");
+                pkColumns.add("id");
+                pkColumns.add("photo_id");
+                pkColumns.add("registration_id");
+            } else if (lowerTable.equals("voter_reg_details") || lowerTable.equals("biometric_details")) {
                 pkColumns.add("registration_id");
             } else if (lowerTable.equals("doc_type") || lowerTable.equals("location")) {
                 pkColumns.add("code");

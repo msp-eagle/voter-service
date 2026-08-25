@@ -243,13 +243,88 @@
             color: #ffffff;
             border-color: var(--primary);
         }
+
+        .record-card {
+            margin-top: 24px;
+            display: none;
+        }
+
+        .search-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .records-table-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+
+        table.records-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        table.records-table th, table.records-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        table.records-table th {
+            position: sticky;
+            top: 0;
+            background-color: #f8fafc;
+            font-weight: 600;
+            color: var(--text-muted);
+            z-index: 10;
+        }
+
+        table.records-table tr:hover {
+            background-color: #f1f5f9;
+        }
+
+        .record-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 10px 14px;
+            background-color: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        .selection-count-badge {
+            background-color: #e0e7ff;
+            color: #3730a3;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
 
     <header>
         <h1>LAN-Based Voter Data Transfer</h1>
-        <p>Local Machine &amp; Workstation PostgreSQL Synchronization Dashboard</p>
+        <p>Local Machine &amp; Workstation PostgreSQL (192.168.1.232) Synchronization Dashboard</p>
     </header>
 
     <!-- Connection Section -->
@@ -335,15 +410,77 @@
                 <input type="text" id="selectedWsTableDisplay" readonly value="None" style="background-color: #f1f5f9;">
             </div>
 
-            <button id="btnDownload" class="btn btn-success" style="width: 100%;" disabled onclick="performDownload()">
-                DOWNLOAD
-            </button>
+            <div style="display: flex; gap: 8px;">
+                <button id="btnFetchRecords" class="btn btn-primary" style="flex: 1;" disabled onclick="fetchWorkstationRecords()">
+                    VIEW RECORDS TABLE
+                </button>
+                <button id="btnDownload" class="btn btn-success" style="flex: 1;" disabled onclick="performDownload()">
+                    DOWNLOAD ALL
+                </button>
+            </div>
 
             <div id="downloadResultBox" class="result-box">
                 <div>Download Status: <strong id="downloadStatusText">--</strong></div>
                 <div class="result-metric">Records Downloaded: <span id="downloadRecordCount">0</span></div>
                 <div id="downloadDetailMsg" style="margin-top: 6px; font-size: 12px;"></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Workstation Server Records Explorer & Selective Downloader -->
+    <div id="recordsExplorerCard" class="card record-card">
+        <div class="card-title">
+            <span>Server Records Explorer &mdash; <span id="explorerTableName" style="color: var(--primary);">None</span></span>
+            <span id="explorerTotalCount" class="history-badge badge-download">0 Records Available on Server</span>
+        </div>
+
+        <div class="record-toolbar">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <label style="display: flex; align-items: center; gap: 6px; margin-bottom: 0; cursor: pointer;">
+                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)">
+                    <span>Select All</span>
+                </label>
+                <span id="selectedCountBadge" class="selection-count-badge">0 Selected</span>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+                <button id="btnDownloadSelected" class="btn btn-success" disabled onclick="performDownloadSelected()">
+                    DOWNLOAD SELECTED RECORDS (<span id="btnSelectedCount">0</span>)
+                </button>
+                <button class="btn" style="background-color: #e2e8f0; color: #334155;" onclick="closeRecordsExplorer()">
+                    Close
+                </button>
+            </div>
+        </div>
+
+        <div class="search-bar">
+            <input type="text" id="recordSearchInput" class="search-input" placeholder="Search records by ID, Name, Status, etc..." onkeyup="filterRecords(this.value)">
+            <span id="recordFilterCount" style="font-size: 12px; color: var(--text-muted);"></span>
+        </div>
+
+        <div class="records-table-container">
+            <table class="records-table" id="recordsTable">
+                <thead id="recordsTableHead">
+                    <tr>
+                        <th style="width: 40px;"><input type="checkbox" disabled></th>
+                        <th>Record ID</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="recordsTableBody">
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                            Click "VIEW RECORDS TABLE" to load records from Server (192.168.1.232).
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="selectiveDownloadResultBox" class="result-box" style="margin-top: 12px;">
+            <div>Download Status: <strong id="selectiveStatusText">--</strong></div>
+            <div class="result-metric">Records Downloaded: <span id="selectiveRecordCount">0</span></div>
+            <div id="selectiveDetailMsg" style="margin-top: 6px; font-size: 12px;"></div>
         </div>
     </div>
 
@@ -379,6 +516,9 @@
 
     <script>
         let isConnected = false;
+        let currentLoadedRecords = [];
+        let selectedRecordIds = new Set();
+        let currentExplorerTable = '';
 
         function selectWorkstationIp(ip) {
             document.getElementById('workstationIp').value = ip;
@@ -440,6 +580,7 @@
             document.getElementById('wsTableSelect').disabled = !enable;
             document.getElementById('btnUpload').disabled = !enable;
             document.getElementById('btnDownload').disabled = !enable;
+            document.getElementById('btnFetchRecords').disabled = !enable;
         }
 
         async function loadTables() {
@@ -488,6 +629,253 @@
         function onWsTableChange() {
             const val = document.getElementById('wsTableSelect').value;
             document.getElementById('selectedWsTableDisplay').value = val || 'None';
+            if (val && val !== currentExplorerTable) {
+                selectedRecordIds.clear();
+                updateSelectionBadges();
+            }
+        }
+
+        async function fetchWorkstationRecords() {
+            if (!isConnected) {
+                alert('Please connect to Workstation first.');
+                return;
+            }
+            const ip = document.getElementById('workstationIp').value.trim();
+            const table = document.getElementById('wsTableSelect').value;
+
+            if (!table) {
+                alert('Please select a workstation table first.');
+                return;
+            }
+
+            currentExplorerTable = table;
+            const card = document.getElementById('recordsExplorerCard');
+            card.style.display = 'block';
+            document.getElementById('explorerTableName').textContent = table;
+            document.getElementById('explorerTotalCount').textContent = 'Loading records...';
+
+            const tbody = document.getElementById('recordsTableBody');
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px;">Fetching records from server ' + ip + '...</td></tr>';
+
+            const btnFetch = document.getElementById('btnFetchRecords');
+            btnFetch.disabled = true;
+            btnFetch.textContent = 'FETCHING...';
+
+            try {
+                const res = await fetch(`/api/v1/local/transfer/workstation-records?ip=${encodeURIComponent(ip)}&table=${encodeURIComponent(table)}`);
+                if (!res.ok) {
+                    throw new Error('Failed to fetch workstation records (HTTP ' + res.status + ')');
+                }
+                const records = await res.json();
+                currentLoadedRecords = records;
+                selectedRecordIds.clear();
+
+                document.getElementById('explorerTotalCount').textContent = `${records.length} Records Available on Server`;
+                renderRecordsTable(records);
+                updateSelectionBadges();
+                card.scrollIntoView({ behavior: 'smooth' });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--danger); padding: 20px;">Error loading records: ${err.message}</td></tr>`;
+                document.getElementById('explorerTotalCount').textContent = 'Error loading records';
+            } finally {
+                btnFetch.disabled = false;
+                btnFetch.textContent = 'VIEW RECORDS TABLE';
+            }
+        }
+
+        function getRecordIdentifier(row) {
+            if (!row) return '';
+            const idCols = ['registration_id', 'code', 'id', 'uin', 'hierarchy_level'];
+            for (let c of idCols) {
+                for (let k in row) {
+                    if (k.toLowerCase() === c && row[k] !== null && row[k] !== undefined) {
+                        return String(row[k]);
+                    }
+                }
+            }
+            for (let k in row) {
+                if (row[k] !== null && row[k] !== undefined) {
+                    return String(row[k]);
+                }
+            }
+            return Math.random().toString(36).substring(2, 9);
+        }
+
+        function renderRecordsTable(records) {
+            const thead = document.getElementById('recordsTableHead');
+            const tbody = document.getElementById('recordsTableBody');
+            document.getElementById('selectAllCheckbox').checked = false;
+
+            if (!records || records.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No records found in server table.</td></tr>';
+                return;
+            }
+
+            const allKeys = Object.keys(records[0]);
+            const displayKeys = allKeys.filter(k => {
+                const sample = String(records[0][k] || '');
+                return sample.length < 150;
+            }).slice(0, 6);
+
+            let headHtml = '<tr><th style="width: 40px;"><input type="checkbox" id="selectAllHeader" onchange="toggleSelectAll(this.checked)"></th>';
+            displayKeys.forEach(k => {
+                headHtml += `<th>${k.toUpperCase().replace(/_/g, ' ')}</th>`;
+            });
+            headHtml += '</tr>';
+            thead.innerHTML = headHtml;
+
+            let bodyHtml = '';
+            records.forEach((row, idx) => {
+                const recId = getRecordIdentifier(row);
+                const isChecked = selectedRecordIds.has(recId);
+
+                bodyHtml += `<tr id="row-${idx}">
+                    <td><input type="checkbox" class="record-row-checkbox" data-id="${encodeURIComponent(recId)}" ${isChecked ? 'checked' : ''} onchange="toggleRowSelection('${encodeURIComponent(recId)}', this.checked)"></td>`;
+
+                displayKeys.forEach(k => {
+                    let val = row[k];
+                    if (val === null || val === undefined) val = '<span style="color: #94a3b8;">null</span>';
+                    else if (typeof val === 'object') val = JSON.stringify(val);
+                    else val = String(val);
+
+                    bodyHtml += `<td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${val}</td>`;
+                });
+
+                bodyHtml += '</tr>';
+            });
+
+            tbody.innerHTML = bodyHtml;
+        }
+
+        function toggleSelectAll(checked) {
+            const checkboxes = document.querySelectorAll('.record-row-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = checked;
+                const id = decodeURIComponent(cb.getAttribute('data-id'));
+                if (checked) {
+                    selectedRecordIds.add(id);
+                } else {
+                    selectedRecordIds.delete(id);
+                }
+            });
+
+            document.getElementById('selectAllCheckbox').checked = checked;
+            const headerCb = document.getElementById('selectAllHeader');
+            if (headerCb) headerCb.checked = checked;
+
+            updateSelectionBadges();
+        }
+
+        function toggleRowSelection(encodedId, checked) {
+            const id = decodeURIComponent(encodedId);
+            if (checked) {
+                selectedRecordIds.add(id);
+            } else {
+                selectedRecordIds.delete(id);
+            }
+
+            const total = document.querySelectorAll('.record-row-checkbox').length;
+            const isAll = (selectedRecordIds.size === total && total > 0);
+            document.getElementById('selectAllCheckbox').checked = isAll;
+            const headerCb = document.getElementById('selectAllHeader');
+            if (headerCb) headerCb.checked = isAll;
+
+            updateSelectionBadges();
+        }
+
+        function updateSelectionBadges() {
+            const count = selectedRecordIds.size;
+            document.getElementById('selectedCountBadge').textContent = `${count} Selected`;
+            document.getElementById('btnSelectedCount').textContent = count;
+            document.getElementById('btnDownloadSelected').disabled = (count === 0);
+        }
+
+        function filterRecords(term) {
+            const query = (term || '').trim().toLowerCase();
+            const rows = document.querySelectorAll('#recordsTableBody tr');
+            let visibleCount = 0;
+
+            rows.forEach(r => {
+                const text = r.textContent.toLowerCase();
+                if (!query || text.includes(query)) {
+                    r.style.display = '';
+                    visibleCount++;
+                } else {
+                    r.style.display = 'none';
+                }
+            });
+
+            document.getElementById('recordFilterCount').textContent = query ? `Showing ${visibleCount} of ${rows.length} rows` : '';
+        }
+
+        function closeRecordsExplorer() {
+            document.getElementById('recordsExplorerCard').style.display = 'none';
+        }
+
+        async function performDownloadSelected() {
+            if (!isConnected) {
+                alert('Workstation connection is not active.');
+                return;
+            }
+            const ip = document.getElementById('workstationIp').value.trim();
+            const table = currentExplorerTable || document.getElementById('wsTableSelect').value;
+
+            if (!table) {
+                alert('Please select a workstation table.');
+                return;
+            }
+
+            if (selectedRecordIds.size === 0) {
+                alert('Please select at least one record to download.');
+                return;
+            }
+
+            const btnDownloadSelected = document.getElementById('btnDownloadSelected');
+            btnDownloadSelected.disabled = true;
+            btnDownloadSelected.textContent = 'DOWNLOADING...';
+
+            const resultBox = document.getElementById('selectiveDownloadResultBox');
+            resultBox.style.display = 'none';
+
+            const recordIdList = Array.from(selectedRecordIds);
+
+            try {
+                const res = await fetch('/api/v1/local/transfer/download-selected', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        workstationIp: ip,
+                        tableName: table,
+                        recordIds: recordIdList
+                    })
+                });
+
+                const data = await res.json();
+                resultBox.style.display = 'block';
+
+                if (data.status === 'SUCCESS') {
+                    resultBox.className = 'result-box success';
+                    document.getElementById('selectiveStatusText').textContent = 'SUCCESS';
+                    document.getElementById('selectiveRecordCount').textContent = data.recordsTransferred;
+                    document.getElementById('selectiveDetailMsg').textContent = data.message;
+                } else {
+                    resultBox.className = 'result-box failed';
+                    document.getElementById('selectiveStatusText').textContent = 'FAILED';
+                    document.getElementById('selectiveRecordCount').textContent = 0;
+                    document.getElementById('selectiveDetailMsg').textContent = data.message;
+                }
+            } catch (err) {
+                resultBox.style.display = 'block';
+                resultBox.className = 'result-box failed';
+                document.getElementById('selectiveStatusText').textContent = 'FAILED';
+                document.getElementById('selectiveRecordCount').textContent = 0;
+                document.getElementById('selectiveDetailMsg').textContent = err.message;
+            } finally {
+                btnDownloadSelected.disabled = false;
+                btnDownloadSelected.innerHTML = `DOWNLOAD SELECTED RECORDS (<span id="btnSelectedCount">${selectedRecordIds.size}</span>)`;
+                await loadTables();
+                await loadHistory();
+            }
         }
 
         async function performUpload() {
@@ -588,7 +976,7 @@
                 document.getElementById('downloadDetailMsg').textContent = err.message;
             } finally {
                 btnDownload.disabled = false;
-                btnDownload.textContent = 'DOWNLOAD';
+                btnDownload.textContent = 'DOWNLOAD ALL';
                 await loadTables();
                 await loadHistory();
             }
@@ -610,7 +998,7 @@
                     const tr = document.createElement('tr');
                     const timeStr = item.createdAt ? new Date(item.createdAt).toLocaleString() : '--';
                     const statusClass = item.status === 'SUCCESS' ? 'badge-success' : 'badge-failed';
-                    const opClass = item.operation === 'UPLOAD' ? 'badge-upload' : 'badge-download';
+                    const opClass = item.operation && item.operation.includes('UPLOAD') ? 'badge-upload' : 'badge-download';
 
                     tr.innerHTML = `
                         <td>${item.id}</td>

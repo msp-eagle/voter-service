@@ -127,26 +127,31 @@ public class WorkstationTransferServiceImpl implements WorkstationTransferServic
     @Override
     public TransferRequestDTO getDownloadData(String tableName) {
         String schemaName = "public";
-        String actualTable = tableName;
+        String actualTable = (tableName != null && !tableName.trim().isEmpty()) ? tableName.trim() : "doctable";
 
-        if (tableName != null && tableName.contains(".")) {
-            String[] parts = tableName.split("\\.");
-            schemaName = parts[0];
-            actualTable = parts[1];
+        List<Map<String, Object>> rows;
+        if ("doctable".equalsIgnoreCase(actualTable) || "public.doctable".equalsIgnoreCase(actualTable)) {
+            actualTable = "doctable";
+            rows = jdbcTemplate.queryForList("SELECT \"ID\", \"FIRSTNAME\", \"LASTNAME\", \"SEX\", \"DOBYEAR\", \"DOBMONTH\", \"DOBDAY\" FROM public.doctable");
         } else {
-            // Find schema for table
-            List<TableInfoDTO> available = getAvailableTables();
-            for (TableInfoDTO t : available) {
-                if (t.getTableName().equalsIgnoreCase(tableName)) {
-                    schemaName = t.getSchemaName();
-                    actualTable = t.getTableName();
-                    break;
+            if (actualTable.contains(".")) {
+                String[] parts = actualTable.split("\\.");
+                schemaName = parts[0];
+                actualTable = parts[1];
+            } else {
+                // Find schema for table
+                List<TableInfoDTO> available = getAvailableTables();
+                for (TableInfoDTO t : available) {
+                    if (t.getTableName().equalsIgnoreCase(actualTable)) {
+                        schemaName = t.getSchemaName();
+                        actualTable = t.getTableName();
+                        break;
+                    }
                 }
             }
+            String fullTableName = getFullTableName(schemaName, actualTable);
+            rows = jdbcTemplate.queryForList("SELECT * FROM " + fullTableName);
         }
-
-        String fullTableName = getFullTableName(schemaName, actualTable);
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList("SELECT * FROM " + fullTableName);
 
         // Process byte arrays / binary fields into base64 if needed for JSON safety
         List<Map<String, Object>> processedRows = rows.stream().map(this::processRowForOutput).collect(Collectors.toList());
@@ -318,7 +323,9 @@ public class WorkstationTransferServiceImpl implements WorkstationTransferServic
         if (pkColumns.isEmpty()) {
             // Hardcode known primary keys for domain models if metadata PK search missed
             String lowerTable = table.toLowerCase();
-            if (lowerTable.equals("voter_reg_details") || lowerTable.equals("biometric_details")) {
+            if (lowerTable.equals("doctable")) {
+                pkColumns.add("ID");
+            } else if (lowerTable.equals("voter_reg_details") || lowerTable.equals("biometric_details")) {
                 pkColumns.add("registration_id");
             } else if (lowerTable.equals("doc_type") || lowerTable.equals("location")) {
                 pkColumns.add("code");

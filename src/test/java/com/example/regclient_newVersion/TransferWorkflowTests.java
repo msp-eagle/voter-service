@@ -126,4 +126,123 @@ public class TransferWorkflowTests {
         org.junit.jupiter.api.Assertions.assertEquals("http://192.168.1.50:9090", workstationApiClient.formatBaseUrl("192.168.1.50:9090"));
         org.junit.jupiter.api.Assertions.assertEquals("http://127.0.0.1:8080", workstationApiClient.formatBaseUrl("http://127.0.0.1:8080/"));
     }
+
+    @Test
+    public void testGetWorkstationRecordsEndpoint() throws Exception {
+        java.util.Map<String, Object> record = new java.util.HashMap<>();
+        record.put("registration_id", "REG-9999");
+        record.put("name", "Juan Dela Cruz");
+        when(localTransferService.getWorkstationRecords(anyString(), anyString()))
+                .thenReturn(Collections.singletonList(record));
+
+        mockMvc.perform(get("/api/v1/voter-transfer/workstation-records")
+                        .param("ip", "192.168.1.232")
+                        .param("table", "voter_reg_details"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].registration_id").value("REG-9999"))
+                .andExpect(jsonPath("$[0].name").value("Juan Dela Cruz"));
+    }
+
+    @Test
+    public void testDownloadSelectedEndpoint() throws Exception {
+        TransferResponseDTO response = new TransferResponseDTO("SUCCESS", "Selected 2 records downloaded", 2, 0, "voter_reg_details");
+        when(localTransferService.performDownloadSelected(anyString(), anyString(), anyList()))
+                .thenReturn(response);
+
+        String jsonPayload = "{\"workstationIp\":\"192.168.1.232\",\"tableName\":\"voter_reg_details\",\"recordIds\":[\"REG-101\",\"REG-102\"]}";
+
+        mockMvc.perform(post("/api/v1/voter-transfer/download-selected")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.recordsTransferred").value(2));
+    }
+
+    @Test
+    public void testLocalDownloadSelectedEndpoint() throws Exception {
+        TransferResponseDTO response = new TransferResponseDTO("SUCCESS", "Selected 1 records downloaded", 1, 0, "voter_reg_details");
+        when(localTransferService.performDownloadSelected(anyString(), anyString(), anyList()))
+                .thenReturn(response);
+
+        String jsonPayload = "{\"workstationIp\":\"192.168.1.232\",\"tableName\":\"voter_reg_details\",\"recordIds\":[\"REG-101\"]}";
+
+        mockMvc.perform(post("/api/v1/local/transfer/download-selected")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.recordsTransferred").value(1));
+    }
+
+    @Test
+    public void testWorkstationTableRecordsEndpoint() throws Exception {
+        java.util.Map<String, Object> record = new java.util.HashMap<>();
+        record.put("registration_id", "REG-555");
+        record.put("status", "SUBMITTED");
+        TransferRequestDTO req = new TransferRequestDTO("voter_reg_details", "public", Collections.singletonList(record), 1, "192.168.1.232", "REG-555");
+        when(workstationTransferService.getDownloadData("voter_reg_details")).thenReturn(req);
+
+        mockMvc.perform(get("/api/v1/transfer/records/voter_reg_details"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].registration_id").value("REG-555"))
+                .andExpect(jsonPath("$[0].status").value("SUBMITTED"));
+    }
+
+    @Test
+    public void testGetDoctableRecordsDefaultEndpoint() throws Exception {
+        java.util.Map<String, Object> docRecord = new java.util.HashMap<>();
+        docRecord.put("ID", "DOC-001");
+        docRecord.put("FIRSTNAME", "John");
+        docRecord.put("LASTNAME", "Doe");
+        docRecord.put("SEX", "M");
+        docRecord.put("DOBYEAR", "1990");
+        docRecord.put("DOBMONTH", "05");
+        docRecord.put("DOBDAY", "15");
+
+        when(localTransferService.getWorkstationRecords(anyString(), eq("doctable")))
+                .thenReturn(Collections.singletonList(docRecord));
+
+        mockMvc.perform(get("/api/v1/local/transfer/workstation-records")
+                        .param("ip", "192.168.1.232"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].ID").value("DOC-001"))
+                .andExpect(jsonPath("$[0].FIRSTNAME").value("John"))
+                .andExpect(jsonPath("$[0].LASTNAME").value("Doe"))
+                .andExpect(jsonPath("$[0].SEX").value("M"))
+                .andExpect(jsonPath("$[0].DOBYEAR").value("1990"))
+                .andExpect(jsonPath("$[0].DOBMONTH").value("05"))
+                .andExpect(jsonPath("$[0].DOBDAY").value("15"));
+    }
+
+    @Test
+    public void testDownloadSelectedDoctableRecords() throws Exception {
+        TransferResponseDTO response = new TransferResponseDTO("SUCCESS", "Selected 1 records downloaded", 1, 0, "doctable");
+        when(localTransferService.performDownloadSelected(eq("192.168.1.232"), eq("doctable"), anyList()))
+                .thenReturn(response);
+
+        String jsonPayload = "{\"workstationIp\":\"192.168.1.232\",\"tableName\":\"doctable\",\"recordIds\":[\"DOC-001\"]}";
+
+        mockMvc.perform(post("/api/v1/local/transfer/download-selected")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.recordsTransferred").value(1))
+                .andExpect(jsonPath("$.tableName").value("doctable"));
+    }
+
+    @Test
+    public void testClearLocalDataEndpoint() throws Exception {
+        TransferResponseDTO response = new TransferResponseDTO("SUCCESS", "Cleared data from 3 local table(s)", 15, 0, "ALL");
+        when(localTransferService.clearLocalTableData(any()))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/local/transfer/clear")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tableName\":\"ALL\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.recordsTransferred").value(15));
+    }
 }

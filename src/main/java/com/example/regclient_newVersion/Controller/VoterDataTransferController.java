@@ -80,14 +80,60 @@ public class VoterDataTransferController {
 
     /**
      * Download API: Downloads data from Workstation DB to Local DB
-     * POST /api/v1/transfer/download
+     * POST/GET /api/v1/voter-transfer/download
      */
-    @PostMapping("/download")
-    public ResponseEntity<TransferResponseDTO> downloadData(@RequestParam(value = "ip", required = false) String workstationIp,
-                                                             @RequestParam(value = "table", required = false) String tableName) {
-        String targetIp = resolveWorkstationIp(workstationIp);
-        TransferResponseDTO response = localTransferService.performDownload(targetIp, tableName);
+    @RequestMapping(value = "/download", method = {RequestMethod.GET, RequestMethod.POST})
+    public ResponseEntity<TransferResponseDTO> downloadData(
+            @RequestParam(value = "ip", required = false) String workstationIp,
+            @RequestParam(value = "table", required = false, defaultValue = "doctable") String tableName,
+            @RequestBody(required = false) com.example.regclient_newVersion.dto.DownloadSelectedRequestDTO downloadRequest) {
+        String targetIp = (downloadRequest != null && downloadRequest.getWorkstationIp() != null)
+                ? downloadRequest.getWorkstationIp() : resolveWorkstationIp(workstationIp);
+        String targetTable = (downloadRequest != null && downloadRequest.getTableName() != null)
+                ? downloadRequest.getTableName() : tableName;
+        List<String> recordIds = (downloadRequest != null) ? downloadRequest.getRecordIds() : null;
+
+        TransferResponseDTO response;
+        if (recordIds != null && !recordIds.isEmpty()) {
+            response = localTransferService.performDownloadSelected(targetIp, targetTable, recordIds);
+        } else {
+            response = localTransferService.performDownload(targetIp, targetTable);
+        }
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Download Selected API: Downloads specific selected records from Workstation DB to Local DB
+     * POST/GET /api/v1/voter-transfer/download-selected
+     */
+    @RequestMapping(value = "/download-selected", method = {RequestMethod.GET, RequestMethod.POST})
+    public ResponseEntity<TransferResponseDTO> downloadSelectedData(
+            @RequestParam(value = "ip", required = false) String workstationIp,
+            @RequestParam(value = "table", required = false, defaultValue = "doctable") String tableName,
+            @RequestParam(value = "recordIds", required = false) List<String> queryRecordIds,
+            @RequestBody(required = false) com.example.regclient_newVersion.dto.DownloadSelectedRequestDTO downloadRequest) {
+        String targetIp = (downloadRequest != null && downloadRequest.getWorkstationIp() != null)
+                ? downloadRequest.getWorkstationIp() : resolveWorkstationIp(workstationIp);
+        String targetTable = (downloadRequest != null && downloadRequest.getTableName() != null)
+                ? downloadRequest.getTableName() : tableName;
+        List<String> recordIds = (downloadRequest != null && downloadRequest.getRecordIds() != null)
+                ? downloadRequest.getRecordIds() : queryRecordIds;
+
+        TransferResponseDTO response = localTransferService.performDownloadSelected(targetIp, targetTable, recordIds);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Records API: Fetch records from Workstation PostgreSQL DB for preview and selection
+     * GET /api/v1/transfer/workstation-records
+     */
+    @GetMapping("/workstation-records")
+    public ResponseEntity<List<java.util.Map<String, Object>>> getWorkstationRecords(
+            @RequestParam(value = "ip", required = false) String workstationIp,
+            @RequestParam(value = "table", required = false, defaultValue = "doctable") String tableName) {
+        String targetIp = resolveWorkstationIp(workstationIp);
+        List<java.util.Map<String, Object>> records = localTransferService.getWorkstationRecords(targetIp, tableName);
+        return ResponseEntity.ok(records);
     }
 
     /**
@@ -112,6 +158,24 @@ public class VoterDataTransferController {
     }
 
     /**
+     * Clear API: Clears local database table data
+     * POST/DELETE/GET /api/v1/voter-transfer/clear
+     */
+    @RequestMapping(value = "/clear", method = {RequestMethod.POST, RequestMethod.DELETE, RequestMethod.GET})
+    public ResponseEntity<TransferResponseDTO> clearLocalData(
+            @RequestParam(value = "table", required = false) String tableName,
+            @RequestBody(required = false) java.util.Map<String, String> requestBody) {
+        String targetTable = tableName;
+        if (requestBody != null && requestBody.containsKey("tableName")) {
+            targetTable = requestBody.get("tableName");
+        } else if (requestBody != null && requestBody.containsKey("table")) {
+            targetTable = requestBody.get("table");
+        }
+        TransferResponseDTO response = localTransferService.clearLocalTableData(targetTable);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * History API: Audit trail of transfer operations
      * GET /api/v1/transfer/history
      */
@@ -120,4 +184,5 @@ public class VoterDataTransferController {
         List<TransferHistory> history = localTransferService.getTransferHistory();
         return ResponseEntity.ok(history);
     }
+    
 }

@@ -63,4 +63,14 @@ public class WorkstationTransferController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
+    @GetMapping("/records/{table}")
+    public ResponseEntity<List<java.util.Map<String, Object>>> getTableRecords(@PathVariable("table") String tableName) {
+        try {
+            TransferRequestDTO data = workstationTransferService.getDownloadData(tableName);
+            return ResponseEntity.ok(data != null ? data.getRecords() : java.util.Collections.emptyList());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
 }
