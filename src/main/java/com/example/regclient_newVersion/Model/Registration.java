@@ -19,7 +19,7 @@ public class Registration {
     @Type(type = "org.hibernate.type.TextType")
     @Column(name = "documents_data", columnDefinition = "TEXT")
     private String documentsData;
-    @Column(name = "vid")
+    @Column(name = "voter_id")
     private String vid;
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
