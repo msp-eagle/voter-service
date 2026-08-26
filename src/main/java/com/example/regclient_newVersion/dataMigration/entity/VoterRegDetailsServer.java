@@ -1,12 +1,13 @@
-package com.example.regclient_newVersion.Model;
+package com.example.regclient_newVersion.dataMigration.entity;
 
 import org.hibernate.annotations.Type;
+
 import javax.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "voter_reg_details")
-public class Registration {
+public class VoterRegDetailsServer {
 
     @Id
     @Column(name = "registration_id", nullable = false, unique = true)
@@ -26,9 +27,9 @@ public class Registration {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
     @Column(name = "status")
     private String status;
-
     public String getVid() {
         return vid;
     }
@@ -37,7 +38,7 @@ public class Registration {
         this.vid = vid;
     }
 
-    public Registration() {
+    public VoterRegDetailsServer() {
     }
 
     @PrePersist

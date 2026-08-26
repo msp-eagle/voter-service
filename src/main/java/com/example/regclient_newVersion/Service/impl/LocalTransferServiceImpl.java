@@ -1,15 +1,24 @@
 package com.example.regclient_newVersion.Service.impl;
 
+import com.example.regclient_newVersion.Model.BiometricDetails;
+import com.example.regclient_newVersion.Model.Registration;
+import com.example.regclient_newVersion.dataMigration.entity.BiometricDetailsServer;
+import com.example.regclient_newVersion.dataMigration.entity.VoterRegDetailsServer;
+import com.example.regclient_newVersion.dataMigration.repository.BiometricDetailsServerRepo;
+import com.example.regclient_newVersion.dataMigration.repository.VoterRegDetailsServerRepo;
 import com.example.regclient_newVersion.dto.ConnectionHealthDTO;
 import com.example.regclient_newVersion.dto.TableInfoDTO;
 import com.example.regclient_newVersion.dto.TransferRequestDTO;
 import com.example.regclient_newVersion.dto.TransferResponseDTO;
 import com.example.regclient_newVersion.Model.TransferHistory;
+import com.example.regclient_newVersion.repository.BiometricDetailsRepository;
+import com.example.regclient_newVersion.repository.RegistrationRepository;
 import com.example.regclient_newVersion.repository.TransferHistoryRepository;
 import com.example.regclient_newVersion.Service.LocalTransferService;
 import com.example.regclient_newVersion.Service.WorkstationApiClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,6 +69,20 @@ public class LocalTransferServiceImpl implements LocalTransferService {
 
     @Value("${spring.datasource.password3:root}")
     private String localApplicantsPassword;
+
+    @Autowired
+    private BiometricDetailsRepository biometricDetailsRepository;
+
+    @Autowired
+    private RegistrationRepository registrationRepository;
+
+    @Autowired
+    private BiometricDetailsServerRepo biometricDetailsServerRepo;
+
+    @Autowired
+    private VoterRegDetailsServerRepo voterRegDetailsServerRepo;
+
+
 
     @Autowired
     public LocalTransferServiceImpl(WorkstationApiClient workstationApiClient,
@@ -276,9 +299,110 @@ public class LocalTransferServiceImpl implements LocalTransferService {
         return tables;
     }
 
+    public BiometricDetailsServer convertToServerBioEntity(BiometricDetails source) {
+
+        if (source == null) {
+            return null;
+        }
+
+        BiometricDetailsServer target = new BiometricDetailsServer();
+
+        target.setRegistrationId(source.getRegistrationId());
+
+        // Face
+        target.setFace(source.getFace());
+
+        // Iris
+        target.setLeftIris(source.getLeftIris());
+        target.setRightIris(source.getRightIris());
+
+        // Left hand fingerprints
+        target.setLeftThumb(source.getLeftThumb());
+        target.setLeftIndexFinger(source.getLeftIndexFinger());
+        target.setLeftMiddleFinger(source.getLeftMiddleFinger());
+        target.setLeftRingFinger(source.getLeftRingFinger());
+        target.setLeftLittleFinger(source.getLeftLittleFinger());
+
+        // Right hand fingerprints
+        target.setRightThumb(source.getRightThumb());
+        target.setRightIndexFinger(source.getRightIndexFinger());
+        target.setRightMiddleFinger(source.getRightMiddleFinger());
+        target.setRightRingFinger(source.getRightRingFinger());
+        target.setRightLittleFinger(source.getRightLittleFinger());
+
+        // Other fields
+        target.setCreatedAt(source.getCreatedAt());
+        target.setUpdatedAt(source.getUpdatedAt());
+        target.setVoterId(source.getVoterId());
+        target.setStatus(source.getStatus());
+
+        return target;
+    }
+
+    private VoterRegDetailsServer convertToServerDemoEntity(Registration source) {
+
+        if (source == null) {
+            return null;
+        }
+
+        VoterRegDetailsServer target = new VoterRegDetailsServer();
+
+        // Registration ID
+        target.setRegistrationId(source.getRegistrationId());
+
+        // Demographic data
+        target.setDemographicData(source.getDemographicData());
+
+        // Documents data
+        target.setDocumentsData(source.getDocumentsData());
+
+        // Voter ID
+        target.setVid(source.getVid());
+
+        // Created timestamp
+        target.setCreatedAt(source.getCreatedAt());
+
+        // Updated timestamp
+        target.setUpdatedAt(source.getUpdatedAt());
+
+        return target;
+    }
+    @Modifying
+    @Transactional
     @Override
     public TransferResponseDTO performUpload(String workstationIp, String tableName) {
-        if (tableName == null || tableName.trim().isEmpty() || "ALL".equalsIgnoreCase(tableName.trim())) {
+
+       List<BiometricDetails> bioList =  biometricDetailsRepository.findAllByStatus("NEW");
+       List<Registration> voterList =  registrationRepository.findAllByStatus("NEW");
+
+       List<BiometricDetailsServer> copyBio = new ArrayList<>();
+        List<VoterRegDetailsServer> copyDemo = new ArrayList<>();
+
+        bioList.forEach(e-> {
+            copyBio.add(convertToServerBioEntity(e));
+       });
+        voterList.forEach(e-> {
+            copyDemo.add(convertToServerDemoEntity(e));
+        });
+
+        biometricDetailsServerRepo.saveAll(copyBio);
+
+
+        voterRegDetailsServerRepo.saveAll(copyDemo);
+
+        bioList.forEach(e -> e.setStatus("UPLOADED"));
+
+
+        biometricDetailsRepository.saveAll(bioList);
+
+        biometricDetailsServerRepo.flush();
+        voterRegDetailsServerRepo.flush();
+
+
+
+
+
+     /*   if (tableName == null || tableName.trim().isEmpty() || "ALL".equalsIgnoreCase(tableName.trim())) {
             List<TableInfoDTO> localTables = getLocalTables();
             Set<String> processedTables = new HashSet<>();
             int totalTransferred = 0;
@@ -302,7 +426,8 @@ public class LocalTransferServiceImpl implements LocalTransferService {
             }
             return new TransferResponseDTO("SUCCESS", "Batch upload completed: " + summaryMsg.toString(), totalTransferred, 0, "ALL_TABLES");
         }
-        return performUploadForSingleTable(workstationIp, tableName);
+        return performUploadForSingleTable(workstationIp, tableName);*/
+        return new TransferResponseDTO("SUCCESS","Uploaded voter data to server",bioList.size());
     }
 
     private TransferResponseDTO performUploadForSingleTable(String workstationIp, String tableName) {
