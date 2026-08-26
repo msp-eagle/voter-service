@@ -69,6 +69,7 @@ public class RegistrationServiceImpl implements RegistrationService {
         if (requestDTO.getBiometrics() != null && !requestDTO.getBiometrics().isEmpty()) {
             BiometricDetails biometricDetails = mapBiometricsListToEntity(requestDTO.getRegistrationId(), requestDTO.getBiometrics());
             biometricDetails.setVoterId(vid);
+            biometricDetails.setStatus("NEW");
             biometricDetailsRepository.save(biometricDetails);
         }
 

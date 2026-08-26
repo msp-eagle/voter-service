@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.Base64;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -109,4 +110,7 @@ public class VoterService {
         return ResponseEntity.ok(appDemo);
     }
 
+    public ResponseEntity<List<AppDemo>> findAll() {
+        return ResponseEntity.ok(appDemoRepository.findAll());
+    }
 }

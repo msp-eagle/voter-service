@@ -8,6 +8,8 @@ import com.example.regclient_newVersion.dto.VoterService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/voters")
 @CrossOrigin("*")
@@ -39,6 +41,10 @@ public class VoterController {
         return voterService.getAppById(id);
     }
 
+    @GetMapping("/findAll")
+    public ResponseEntity<List<AppDemo>> findAll(){
+        return voterService.findAll();
+    }
 
 
 }
