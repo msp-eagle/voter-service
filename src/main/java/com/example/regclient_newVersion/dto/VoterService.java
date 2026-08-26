@@ -100,4 +100,13 @@ public class VoterService {
 
         return ResponseEntity.ok(docTable);
     }
+
+    public ResponseEntity<AppDemo> getAppById(String id) {
+        AppDemo appDemo = appDemoRepository.findById(id).orElseThrow(
+                ()-> new RuntimeException("Entity Not Found")
+        );
+
+        return ResponseEntity.ok(appDemo);
+    }
+
 }

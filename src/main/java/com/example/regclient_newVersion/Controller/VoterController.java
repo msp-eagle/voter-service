@@ -1,6 +1,7 @@
 package com.example.regclient_newVersion.Controller;
 
 
+import com.example.regclient_newVersion.applicant.entity.AppDemo;
 import com.example.regclient_newVersion.applicant.entity.DocTable;
 import com.example.regclient_newVersion.dto.VoterSearchResponse;
 import com.example.regclient_newVersion.dto.VoterService;
@@ -33,6 +34,10 @@ public class VoterController {
         return voterService.getById(id);
     }
 
+    @GetMapping("/getAppById/{id}")
+    public ResponseEntity<AppDemo> getAppById(@PathVariable String id){
+        return voterService.getAppById(id);
+    }
 
 
 

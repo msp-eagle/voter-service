@@ -70,6 +70,17 @@ public class BiometricDetails {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "voter_id")
+    private String voterId;
+
+    public String getVoterId() {
+        return voterId;
+    }
+
+    public void setVoterId(String voterId) {
+        this.voterId = voterId;
+    }
+
     public BiometricDetails() {
     }
 

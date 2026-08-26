@@ -21,6 +21,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -59,16 +60,18 @@ public class RegistrationServiceImpl implements RegistrationService {
             throw new RuntimeException("Error serializing registration data to JSON", e);
         }
 
-
+        String vid = "63" +
+                LocalDateTime.now().format(
+                        DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
+                );
+        entity.setVid(vid);
         // Save biometrics into dedicated biometric_details table
         if (requestDTO.getBiometrics() != null && !requestDTO.getBiometrics().isEmpty()) {
             BiometricDetails biometricDetails = mapBiometricsListToEntity(requestDTO.getRegistrationId(), requestDTO.getBiometrics());
-
+            biometricDetails.setVoterId(vid);
             biometricDetailsRepository.save(biometricDetails);
         }
-        String vid = "63" + (100000 + new Random().nextInt(900000))
-                + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-        entity.setVid(vid);
+
         Registration savedEntity = registrationRepository.save(entity);
 
 
