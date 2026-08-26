@@ -600,6 +600,49 @@ public class LocalTransferServiceImpl implements LocalTransferService {
         }
     }
 
+    @Override
+    public TransferResponseDTO performDownloadSelectedMulti(String workstationIp, List<String> tableNames, List<String> recordIds) {
+        if (tableNames == null || tableNames.isEmpty()) {
+            return performDownloadSelected(workstationIp, "doctable", recordIds);
+        }
+        if (tableNames.size() == 1) {
+            return performDownloadSelected(workstationIp, tableNames.get(0), recordIds);
+        }
+
+        int totalTransferred = 0;
+        int totalFailed = 0;
+        List<String> successTables = new ArrayList<>();
+        List<String> failedTables = new ArrayList<>();
+        List<String> details = new ArrayList<>();
+
+        for (String table : tableNames) {
+            if (table == null || table.trim().isEmpty()) continue;
+            String cleanTable = table.trim();
+            try {
+                TransferResponseDTO result = performDownloadSelected(workstationIp, cleanTable, recordIds);
+                if ("SUCCESS".equalsIgnoreCase(result.getStatus())) {
+                    totalTransferred += result.getRecordsTransferred();
+                    successTables.add(cleanTable);
+                    details.add(cleanTable + " (" + result.getRecordsTransferred() + " records)");
+                } else {
+                    totalFailed++;
+                    failedTables.add(cleanTable + ": " + result.getMessage());
+                }
+            } catch (Exception e) {
+                totalFailed++;
+                failedTables.add(cleanTable + ": " + e.getMessage());
+            }
+        }
+
+        String overallStatus = failedTables.isEmpty() ? "SUCCESS" : (successTables.isEmpty() ? "FAILED" : "PARTIAL_SUCCESS");
+        String message = "Downloaded " + successTables.size() + " tables: " + String.join(", ", details);
+        if (!failedTables.isEmpty()) {
+            message += ". Failures: " + String.join("; ", failedTables);
+        }
+
+        return new TransferResponseDTO(overallStatus, message, totalTransferred, totalFailed, String.join(", ", tableNames));
+    }
+
     private Object getCaseInsensitiveValue(Map<String, Object> map, String key) {
         if (map == null || key == null) return null;
         for (Map.Entry<String, Object> entry : map.entrySet()) {

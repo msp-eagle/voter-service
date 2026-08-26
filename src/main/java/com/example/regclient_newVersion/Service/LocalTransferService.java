@@ -24,6 +24,8 @@ public interface LocalTransferService {
 
     TransferResponseDTO performDownloadSelected(String workstationIp, String tableName, List<String> recordIds);
 
+    TransferResponseDTO performDownloadSelectedMulti(String workstationIp, List<String> tableNames, List<String> recordIds);
+
     TransferResponseDTO clearLocalTableData(String tableName);
 
     TransferResponseDTO clearAllLocalData();

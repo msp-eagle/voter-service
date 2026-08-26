@@ -233,6 +233,22 @@ public class TransferWorkflowTests {
     }
 
     @Test
+    public void testDownloadSelectedMultiTableRecords() throws Exception {
+        TransferResponseDTO response = new TransferResponseDTO("SUCCESS", "Downloaded 3 tables", 234, 0, "app_demo, app_photo, doctable");
+        when(localTransferService.performDownloadSelectedMulti(eq("192.168.1.232"), anyList(), anyList()))
+                .thenReturn(response);
+
+        String jsonPayload = "{\"workstationIp\":\"192.168.1.232\",\"tableName\":[\"app_demo\",\"app_photo\",\"doctable\"],\"recordIds\":[\"ALL\"]}";
+
+        mockMvc.perform(post("/api/v1/local/transfer/download-selected")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.recordsTransferred").value(234));
+    }
+
+    @Test
     public void testClearLocalDataEndpoint() throws Exception {
         TransferResponseDTO response = new TransferResponseDTO("SUCCESS", "Cleared data from 3 local table(s)", 15, 0, "ALL");
         when(localTransferService.clearLocalTableData(any()))

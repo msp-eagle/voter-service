@@ -85,19 +85,24 @@ public class VoterDataTransferController {
     @RequestMapping(value = "/download", method = {RequestMethod.GET, RequestMethod.POST})
     public ResponseEntity<TransferResponseDTO> downloadData(
             @RequestParam(value = "ip", required = false) String workstationIp,
-            @RequestParam(value = "table", required = false, defaultValue = "doctable") String tableName,
+            @RequestParam(value = "table", required = false) String tableName,
             @RequestBody(required = false) com.example.regclient_newVersion.dto.DownloadSelectedRequestDTO downloadRequest) {
         String targetIp = (downloadRequest != null && downloadRequest.getWorkstationIp() != null)
                 ? downloadRequest.getWorkstationIp() : resolveWorkstationIp(workstationIp);
-        String targetTable = (downloadRequest != null && downloadRequest.getTableName() != null)
-                ? downloadRequest.getTableName() : tableName;
+        List<String> targetTables = (downloadRequest != null && downloadRequest.getTableList() != null && !downloadRequest.getTableList().isEmpty())
+                ? downloadRequest.getTableList() : (tableName != null ? java.util.Collections.singletonList(tableName) : java.util.Collections.singletonList("doctable"));
         List<String> recordIds = (downloadRequest != null) ? downloadRequest.getRecordIds() : null;
 
         TransferResponseDTO response;
-        if (recordIds != null && !recordIds.isEmpty()) {
-            response = localTransferService.performDownloadSelected(targetIp, targetTable, recordIds);
+        if (targetTables.size() > 1) {
+            response = localTransferService.performDownloadSelectedMulti(targetIp, targetTables, recordIds);
         } else {
-            response = localTransferService.performDownload(targetIp, targetTable);
+            String singleTable = !targetTables.isEmpty() ? targetTables.get(0) : "doctable";
+            if (recordIds != null && !recordIds.isEmpty()) {
+                response = localTransferService.performDownloadSelected(targetIp, singleTable, recordIds);
+            } else {
+                response = localTransferService.performDownload(targetIp, singleTable);
+            }
         }
         return ResponseEntity.ok(response);
     }
@@ -109,17 +114,27 @@ public class VoterDataTransferController {
     @RequestMapping(value = "/download-selected", method = {RequestMethod.GET, RequestMethod.POST})
     public ResponseEntity<TransferResponseDTO> downloadSelectedData(
             @RequestParam(value = "ip", required = false) String workstationIp,
-            @RequestParam(value = "table", required = false, defaultValue = "doctable") String tableName,
+            @RequestParam(value = "table", required = false) String tableName,
             @RequestParam(value = "recordIds", required = false) List<String> queryRecordIds,
             @RequestBody(required = false) com.example.regclient_newVersion.dto.DownloadSelectedRequestDTO downloadRequest) {
         String targetIp = (downloadRequest != null && downloadRequest.getWorkstationIp() != null)
                 ? downloadRequest.getWorkstationIp() : resolveWorkstationIp(workstationIp);
-        String targetTable = (downloadRequest != null && downloadRequest.getTableName() != null)
-                ? downloadRequest.getTableName() : tableName;
+        List<String> targetTables = (downloadRequest != null && downloadRequest.getTableList() != null && !downloadRequest.getTableList().isEmpty())
+                ? downloadRequest.getTableList() : (tableName != null ? java.util.Collections.singletonList(tableName) : java.util.Collections.singletonList("doctable"));
         List<String> recordIds = (downloadRequest != null && downloadRequest.getRecordIds() != null)
                 ? downloadRequest.getRecordIds() : queryRecordIds;
 
-        TransferResponseDTO response = localTransferService.performDownloadSelected(targetIp, targetTable, recordIds);
+        TransferResponseDTO response;
+        if (targetTables.size() > 1) {
+            response = localTransferService.performDownloadSelectedMulti(targetIp, targetTables, recordIds);
+        } else {
+            String singleTable = !targetTables.isEmpty() ? targetTables.get(0) : "doctable";
+            if (recordIds != null && !recordIds.isEmpty()) {
+                response = localTransferService.performDownloadSelected(targetIp, singleTable, recordIds);
+            } else {
+                response = localTransferService.performDownload(targetIp, singleTable);
+            }
+        }
         return ResponseEntity.ok(response);
     }
 
