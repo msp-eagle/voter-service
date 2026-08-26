@@ -19,7 +19,7 @@ public class VoterDataTransferController {
 
     private final LocalTransferService localTransferService;
 
-    @Value("${spring.datasource.url1:jdbc:postgresql://192.168.1.232:5432/voter_reg}")
+    @Value("${spring.datasource.url1}")
     private String workstationUrl1;
 
     @Autowired

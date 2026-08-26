@@ -342,15 +342,49 @@ public class LocalTransferServiceImpl implements LocalTransferService {
             return new TransferResponseDTO("SUCCESS", "No local records found in " + tableName + " to upload.", 0);
         }
 
+        // Determine Workstation schema and ensure table exists on Workstation DB
+        String wsSchema = "public";
+        try (Connection checkConn = getWorkstationConnection(workstationIp)) {
+            try {
+                DatabaseMetaData wsMeta = checkConn.getMetaData();
+                try (ResultSet rs = wsMeta.getTables(null, null, "%", new String[]{"TABLE"})) {
+                    while (rs.next()) {
+                        String tName = rs.getString("TABLE_NAME");
+                        if (tName != null && tName.equalsIgnoreCase(tableName)) {
+                            wsSchema = rs.getString("TABLE_SCHEM");
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+            if (wsSchema == null) wsSchema = "public";
+
+            String wsFullTableName = getFullTableName(wsSchema, tableName);
+            if (!localRecords.isEmpty()) {
+                StringBuilder createSql = new StringBuilder("CREATE TABLE IF NOT EXISTS ").append(wsFullTableName).append(" (");
+                List<String> colDefs = new ArrayList<>();
+                Map<String, Object> firstRow = localRecords.get(0);
+                for (String col : firstRow.keySet()) {
+                    colDefs.add(col.toLowerCase() + " TEXT");
+                }
+                createSql.append(String.join(", ", colDefs)).append(")");
+                try (Statement stmt = checkConn.createStatement()) {
+                    stmt.execute(createSql.toString());
+                } catch (Exception ignored) {}
+            }
+        } catch (Exception ignored) {}
+
+        String wsFullTableName = getFullTableName(wsSchema, tableName);
+
         int transferred = 0;
         try (Connection wsConn = getWorkstationConnection(workstationIp)) {
             wsConn.setAutoCommit(false);
             try {
-                List<String> primaryKeys = getPrimaryKeysForConnection(wsConn, schemaName, tableName);
-                Map<String, Integer> columnTypes = getColumnTypesForConnection(wsConn, schemaName, tableName);
+                List<String> primaryKeys = getPrimaryKeysForConnection(wsConn, wsSchema, tableName);
+                Map<String, Integer> columnTypes = getColumnTypesForConnection(wsConn, wsSchema, tableName);
 
                 for (Map<String, Object> record : localRecords) {
-                    upsertRecordToConnection(wsConn, fullTableName, record, primaryKeys, columnTypes);
+                    upsertRecordToConnection(wsConn, wsFullTableName, record, primaryKeys, columnTypes);
                     transferred++;
                 }
                 wsConn.commit();
