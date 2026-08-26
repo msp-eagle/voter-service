@@ -59,12 +59,18 @@ public class RegistrationServiceImpl implements RegistrationService {
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Error serializing registration data to JSON", e);
         }
+        String vid = null;
+        if("NEW".equalsIgnoreCase(requestDTO.getRegType())) {
+            vid = "63" +
+                    LocalDateTime.now().format(
+                            DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
+                    );
 
-        String vid = "63" +
-                LocalDateTime.now().format(
-                        DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
-                );
+        }else {
+          vid =  requestDTO.getOldRegId();
+        }
         entity.setVid(vid);
+        entity.setStatus("NEW");
         // Save biometrics into dedicated biometric_details table
         if (requestDTO.getBiometrics() != null && !requestDTO.getBiometrics().isEmpty()) {
             BiometricDetails biometricDetails = mapBiometricsListToEntity(requestDTO.getRegistrationId(), requestDTO.getBiometrics());
