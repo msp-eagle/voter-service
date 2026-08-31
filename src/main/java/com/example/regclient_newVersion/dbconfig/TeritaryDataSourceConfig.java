@@ -40,7 +40,10 @@ public class TeritaryDataSourceConfig {
         Map<String, Object> properties = new HashMap<>();
 
         properties.put("hibernate.hbm2ddl.auto", "none");
-
+//        properties.put(
+//                "hibernate.dialect",
+//                "org.hibernate.dialect.PostgreSQLDialect"
+//        );
 
         return builder
                 .dataSource(teritaryDataSource())

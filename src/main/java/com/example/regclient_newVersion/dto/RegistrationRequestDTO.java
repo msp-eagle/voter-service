@@ -18,7 +18,7 @@ public class RegistrationRequestDTO {
     @Valid
     private List<BiometricsDto> biometrics;
 
-    private String RegType;
+    private String regType;
     private String oldRegId;
 
     public RegistrationRequestDTO() {
@@ -64,11 +64,11 @@ public class RegistrationRequestDTO {
     }
 
     public String getRegType() {
-        return RegType;
+        return regType;
     }
 
     public void setRegType(String regType) {
-        RegType = regType;
+        this.regType = regType;
     }
 
     public String getOldRegId() {

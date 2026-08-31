@@ -825,7 +825,8 @@ public class LocalTransferServiceImpl implements LocalTransferService {
 
         List<String> tablesToClear = new ArrayList<>();
         if ("ALL".equalsIgnoreCase(target)) {
-            tablesToClear.addAll(Arrays.asList("doctable", "app_demo", "app_photo", "voter_reg_details", "biometric_details", "doc_type", "location", "loc_hierarchy_list"));
+            tablesToClear.addAll(Arrays.asList(
+                    "doctable", "app_demo", "app_photo", "voter_reg_details", "biometric_details", "doc_type", "location", "loc_hierarchy_list"));
             try (Connection conn = getLocalDestinationConnection(null)) {
                 DatabaseMetaData meta = conn.getMetaData();
                 try (ResultSet rs = meta.getTables(null, null, "%", new String[]{"TABLE"})) {
@@ -882,7 +883,16 @@ public class LocalTransferServiceImpl implements LocalTransferService {
         recordAudit("LOCAL", "LOCAL", "127.0.0.1", "CLEAR", target, "SUCCESS", totalCleared, msg);
         return new TransferResponseDTO("SUCCESS", msg, totalCleared, 0, target);
     }
+    private String quoteTableName(String tableName) {
 
+        String[] parts = tableName.trim().split("\\.", 2);
+
+        if (parts.length == 2) {
+            return "\"" + parts[0] + "\".\"" + parts[1] + "\"";
+        }
+
+        return "\"" + tableName.trim() + "\"";
+    }
     @Override
     public List<TransferHistory> getTransferHistory() {
         return transferHistoryRepository.findAllByOrderByCreatedAtDesc();
@@ -991,7 +1001,7 @@ public class LocalTransferServiceImpl implements LocalTransferService {
     }
 
     @Transactional
-    protected void deleteLocalTransferredData(String schema, String table, List<Map<String, Object>> records) {
+    public void deleteLocalTransferredData(String schema, String table, List<Map<String, Object>> records) {
         String fullTableName = getFullTableName(schema, table);
         String archiveTableName = getFullTableName(schema, "archived_" + table);
         List<String> primaryKeys = getPrimaryKeysForTable(schema, table);
