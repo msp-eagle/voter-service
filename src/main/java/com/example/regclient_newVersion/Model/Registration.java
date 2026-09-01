@@ -12,12 +12,10 @@ public class Registration {
     @Column(name = "registration_id", nullable = false, unique = true)
     private String registrationId;
 
-    @Type(type = "org.hibernate.type.TextType")
-    @Column(name = "demographic_data", columnDefinition = "TEXT")
+    @Column(name = "demographic_data")
     private String demographicData;
 
-    @Type(type = "org.hibernate.type.TextType")
-    @Column(name = "documents_data", columnDefinition = "TEXT")
+    @Column(name = "documents_data")
     private String documentsData;
     @Column(name = "voter_id")
     private String vid;

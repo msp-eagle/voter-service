@@ -6,7 +6,7 @@ import javax.persistence.Id;
 import javax.persistence.Table;
 
 @Entity
-@Table(name = "ce_fingerprint_wsq", schema = "public")
+@Table(name = "ce_fingerprint_wsq")
 public class CeFingerprintWsq {
 
     @Id

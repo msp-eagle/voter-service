@@ -7,7 +7,7 @@ import javax.persistence.Lob;
 import javax.persistence.Table;
 
 @Entity
-@Table(name = "ce_signature", schema = "public")
+@Table(name = "ce_signature")
 public class CeSignature {
 
     @Id

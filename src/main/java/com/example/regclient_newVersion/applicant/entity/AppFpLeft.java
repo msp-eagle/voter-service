@@ -8,7 +8,7 @@ import javax.persistence.OneToOne;
 import javax.persistence.Table;
 
 @Entity
-@Table(name = "app_fp_left", schema = "public")
+@Table(name = "app_fp_left")
 public class AppFpLeft {
 
     @Id

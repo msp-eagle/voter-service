@@ -10,25 +10,27 @@ import java.util.Map;
 
 public interface LocalTransferService {
 
-    ConnectionHealthDTO testConnection(String workstationIp);
+//    ConnectionHealthDTO testConnection(String workstationIp);
 
-    List<TableInfoDTO> getLocalTables();
+//    List<TableInfoDTO> getLocalTables();
 
-    List<TableInfoDTO> getWorkstationTables(String workstationIp);
+//    List<TableInfoDTO> getWorkstationTables(String workstationIp);
 
     TransferResponseDTO performUpload(String workstationIp, String tableName);
 
-    TransferResponseDTO performDownload(String workstationIp, String tableName);
+//    TransferResponseDTO performDownload(String workstationIp, String tableName);
 
-    List<Map<String, Object>> getWorkstationRecords(String workstationIp, String tableName);
+//    List<Map<String, Object>> getWorkstationRecords(String workstationIp, String tableName);
 
-    TransferResponseDTO performDownloadSelected(String workstationIp, String tableName, List<String> recordIds);
+//    TransferResponseDTO performDownloadSelected(String workstationIp, String tableName, List<String> recordIds);
 
-    TransferResponseDTO performDownloadSelectedMulti(String workstationIp, List<String> tableNames, List<String> recordIds);
+//    TransferResponseDTO performDownloadSelectedMulti(String workstationIp, List<String> tableNames, List<String> recordIds);
 
-    TransferResponseDTO clearLocalTableData(String tableName);
+//    TransferResponseDTO clearLocalTableData(String tableName);
 
-    TransferResponseDTO clearAllLocalData();
+//    TransferResponseDTO clearAllLocalData();
 
-    List<TransferHistory> getTransferHistory();
+//    List<TransferHistory> getTransferHistory();
+
+    TransferResponseDTO clearAllLocalTableData();
 }
